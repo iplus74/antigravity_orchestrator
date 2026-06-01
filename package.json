@@ -1,0 +1,24 @@
+{
+  "name": "antigravity-orchestrator",
+  "version": "1.0.0",
+  "description": "Antigravity SDK와 Gemini 기반 AI 오케스트레이터",
+  "type": "module",
+  "main": "src/orchestrate.js",
+  "scripts": {
+    "orch": "node src/orchestrate.js",
+    "orch:default": "node src/orchestrate.js --target ../wecostay_home_nuxt --steps ./workflow.default.json --output-dir ./runs",
+    "vision:limits": "tsx src/list-vision-model-limits.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "unofficial-antigravity-sdk": "^1.0.2",
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.0",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}

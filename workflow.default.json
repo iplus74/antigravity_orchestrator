@@ -1,0 +1,25 @@
+[
+  {
+    "name": "step1_request",
+    "model": "gemini-2.0-flash-thinking-exp",
+    "fallbackModels": ["gemini-3.5-flash5"],
+    "mcp": {
+      "tool": "read_category_markdown",
+      "args": {
+        "category": "wecostay.api.260601"
+      }
+    }
+  },
+  {
+    "name": "step2_review",
+    "model": "gemini-2.5-pro",
+    "fallbackModels": ["gemini-1.5-pro"],
+    "prompt": "제공된 [**변경/생성한 파일 목록** (Step 1 결과물)]을 분석하고 꼼꼼히 검수하여 버그나 구문(Syntax) 오류, 비효율적인 로직이 있는지 확인해 주세요. \n- 문제점이 발견되면 해당 오류 사항을 어떻게 수정해야 하는지 상세 가이드를 제공해 주고 반드시 응답 본문에 '[오류 발견]'이라는 텍스트를 포함해 주고 **수정대상 파일 목록** (경로 포함)을 추가해 주세요. 오류가 없다면 응답 본문에 '[오류 없음]'이라고 답변해 주세요.\n- Step 1 결과물에 있는 **변경/생성한 파일 목록**과 **수정대상 파일 목록**을 병합하여 **최종 파일 목록** (경로 포함)을 추가해 주세요."
+  },
+  {
+    "name": "step3_intention",
+    "model": "gemini-2.5-pro",
+    "fallbackModels": ["gemini-1.5-pro"],
+    "prompt": "제공된 [원래 기획 의도 (Step 1 지시사항)]과 [최신 Step 2 검수 결과]를 참고하여, 요구사항이 빠짐없이 잘 구현되었는지 최종 의도 검수(Intent Review)를 진행해 주세요. 의도와 다르게 작동하거나 누락된 비즈니스 요구사항이 있다면 지적해 주시고, 전체적인 일치 여부를 상세히 정리해 주세요."
+  }
+]
