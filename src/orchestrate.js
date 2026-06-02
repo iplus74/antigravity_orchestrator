@@ -15,6 +15,12 @@ const DEFAULT_BACKOFF_MS = 1500
 const DEFAULT_MCP_SEARCHER_PATH = '/Users/yangsukim/data/work/house_sara/mcp-md-searcher/src/index.ts'
 const DEFAULT_MCP_SEARCHER_DATA = '/Users/yangsukim/data/work/house_sara/mcp_data'
 
+const globalAccumulatedUsage = {
+  promptTokenCount: 0,
+  candidatesTokenCount: 0,
+  totalTokenCount: 0,
+}
+
 /**
  * 주어진 값을 1 이상의 정수로 파싱합니다.
  * @param {string|undefined|null} rawValue - 파싱할 값
@@ -397,6 +403,12 @@ function buildFinalMarkdownReport({ targetAbs, ranAt, logDir, results }) {
         `- Attempt: ${step.attempts.try || '(없음)'} / ${step.attempts.maxAttempts || '(없음)'}`,
       )
     }
+    if (step.usage) {
+      lines.push(`- Usage: Prompt ${step.usage.promptTokenCount}, Candidates ${step.usage.candidatesTokenCount}, Total ${step.usage.totalTokenCount}`)
+    }
+    if (step.accumulatedUsage) {
+      lines.push(`- Accumulated Usage: Prompt ${step.accumulatedUsage.promptTokenCount}, Candidates ${step.accumulatedUsage.candidatesTokenCount}, Total ${step.accumulatedUsage.totalTokenCount}`)
+    }
     lines.push('')
     lines.push('#### Output')
     lines.push('')
@@ -557,11 +569,9 @@ async function runStepWithRetry(step, prompt, stepLogFile, args, targetAbs) {
   let succeededStepResult = null
 
   for (const model of modelCandidates) {
-    const mappedModel = mapToGeminiModel(model)
-    
     for (let attempt = 1; attempt <= retryPolicy.maxAttempts; attempt += 1) {
-      console.log(`\n[RUN] ${step.name} model=${model} (mapped=${mappedModel}) attempt=${attempt}/${retryPolicy.maxAttempts}`)
-      await appendStepLog(stepLogFile, `[RUN] model=${model} (mapped=${mappedModel}) attempt=${attempt}`)
+      console.log(`\n[RUN] ${step.name} model=${model} attempt=${attempt}/${retryPolicy.maxAttempts}`)
+      await appendStepLog(stepLogFile, `[RUN] model=${model} attempt=${attempt}`)
 
       let tempAgent = null
       try {
@@ -570,7 +580,7 @@ async function runStepWithRetry(step, prompt, stepLogFile, args, targetAbs) {
           workspaces: [targetAbs],
           capabilities: capabilities,
           hooks: [decideHook],
-          model: mappedModel
+          model
         })
 
         tempAgent = new Agent(tempConfig)
@@ -591,30 +601,45 @@ async function runStepWithRetry(step, prompt, stepLogFile, args, targetAbs) {
         // Antigravity SDK chat API 호출
         const response = await tempAgent.chat(promptContents)
         const output = await response.text()
+        
+        const rawUsage = response.usageMetadata || response.usage_metadata || {}
+        const currentUsage = {
+          promptTokenCount: rawUsage.promptTokenCount ?? rawUsage.prompt_token_count ?? 0,
+          candidatesTokenCount: rawUsage.candidatesTokenCount ?? rawUsage.candidates_token_count ?? 0,
+          totalTokenCount: rawUsage.totalTokenCount ?? rawUsage.total_token_count ?? 0,
+        }
+
+        if (globalAccumulatedUsage) {
+          globalAccumulatedUsage.promptTokenCount += currentUsage.promptTokenCount
+          globalAccumulatedUsage.candidatesTokenCount += currentUsage.candidatesTokenCount
+          globalAccumulatedUsage.totalTokenCount += currentUsage.totalTokenCount
+        }
 
         const stepResult = {
           name: step.name,
-          model: mappedModel,
+          model,
           prompt: step.prompt,
           sendPrompt: prompt,
           attachments: step.mcp?.attachments || [],
           output,
           attempts: {
-            model: mappedModel,
+            model,
             try: attempt,
             maxAttempts: retryPolicy.maxAttempts,
           },
+          usage: currentUsage,
+          accumulatedUsage: { ...globalAccumulatedUsage },
           completedAt: new Date().toISOString(),
         }
 
         succeededStepResult = stepResult
-        await appendStepLog(stepLogFile, `[DONE] model=${mappedModel} outputLength=${output.length}`)
-        console.log(`[DONE] ${step.name} model=${mappedModel} output=${output.length} chars`)
+        await appendStepLog(stepLogFile, `[DONE] model=${model} outputLength=${output.length} tokens=${currentUsage.totalTokenCount} accumulatedTokens=${globalAccumulatedUsage.totalTokenCount}`)
+        console.log(`[DONE] ${step.name} model=${model} output=${output.length} chars (tokens: ${currentUsage.totalTokenCount}, accumulated: ${globalAccumulatedUsage.totalTokenCount})`)
         break
       } catch (error) {
         const message = error?.message || String(error)
-        errors.push({ model: mappedModel, attempt, message })
-        await appendStepLog(stepLogFile, `[FAIL] model=${mappedModel} attempt=${attempt} message=${message}`)
+        errors.push({ model, attempt, message })
+        await appendStepLog(stepLogFile, `[FAIL] model=${model} attempt=${attempt} message=${message}`)
 
         if (attempt < retryPolicy.maxAttempts) {
           const waitMs = retryPolicy.backoffMs * attempt
